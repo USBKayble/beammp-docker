@@ -1,0 +1,38 @@
+services:
+  beammp:
+    image: ghcr.io/USBKayble/beammp-docker:latest
+    container_name: beammp
+    restart: unless-stopped
+    ports:
+      - "30814:30814/tcp"
+      - "30814:30814/udp"
+    environment:
+      # The server reads BEAMMP_* env vars natively - no config file needed.
+      BEAMMP_AUTH_KEY: "your-keymaster-key-here"   # required - get it at https://keymaster.beammp.com
+      BEAMMP_NAME: "Kaleb's Private Server"
+      BEAMMP_DESCRIPTION: "Private server for friends"
+      BEAMMP_MAX_PLAYERS: "8"
+      BEAMMP_MAX_CARS: "5"                          # cars per player
+      BEAMMP_PRIVATE: "true"
+      BEAMMP_MAP: "/levels/gridmap_v2/info.json"
+      BEAMMP_TAGS: "Freeroam,Drift,Racing"
+      # BEAMMP_IP: "0.0.0.0"   # only needed if IPv6 is disabled on the host kernel
+    volumes:
+      - ./Resources:/beammp/Resources   # your mods/scenarios (auto-synced to players)
+      # Optional: mount a hand-edited config instead of env vars
+      # - ./ServerConfig.toml:/beammp/ServerConfig.toml
+
+  # ------------------------------------------------------------------
+  # Networking: frpc is baked INTO the image - set the env vars below to
+  # tunnel through a public-facing frps bridge (bridge/frps.toml). No port
+  # forwarding or public IP needed on this host; players join BRIDGE_IP:30814.
+  #
+  #   BEAMMP_FRP_SERVER:        frps host or IP (unset = no tunnel)
+  #   BEAMMP_FRP_PORT:          frps control port (default 7000)
+  #   BEAMMP_FRP_TOKEN:         shared secret, must match frps.toml
+  #   BEAMMP_FRP_REMOTE_PORT:   public port on the bridge (default 30814)
+  #
+  # Example:
+  #   BEAMMP_FRP_SERVER: "203.0.113.10"
+  #   BEAMMP_FRP_TOKEN: "CHANGE_ME_shared_secret"
+  # ------------------------------------------------------------------

@@ -1,0 +1,6 @@
+config/
+Resources/
+ServerConfig.toml
+.git
+.github
+README.md

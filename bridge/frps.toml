@@ -1,0 +1,22 @@
+# frps - the public-facing bridge for the BeamMP universal container.
+#
+# Deploy this on ANY machine with a public IP (Oracle free AMD VM, any VPS).
+# Players connect to THIS machine's IP:30814; frps relays the traffic over
+# an outbound connection to the frpc bundled inside the server container.
+#
+#     docker run -d --name frps --restart unless-stopped \
+#       -p 7000:7000/tcp -p 30814:30814/tcp -p 30814:30814/udp \
+#       -v "$PWD/frps.toml:/etc/frp/frps.toml:ro" \
+#       fatedier/frps:v0.70.1 -c /etc/frp/frps.toml
+#
+# Firewall (Oracle security list / cloud firewall): open
+#   7000/tcp   (frp control channel)
+#   30814/tcp  (BeamMP game traffic)
+#   30814/udp  (BeamMP game traffic)
+
+# Port frpc clients connect to (the control channel)
+bindPort = 7000
+
+# Shared secret - MUST match BEAMMP_FRP_TOKEN on the server container
+auth.method = "token"
+auth.token = "CHANGE_ME_shared_secret"

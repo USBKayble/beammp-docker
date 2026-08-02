@@ -1,0 +1,5 @@
+# Generated at runtime - do not commit
+config/
+Resources/
+*.toml
+!bridge/frps.toml
