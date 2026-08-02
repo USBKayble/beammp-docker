@@ -43,7 +43,7 @@ chmod 644 "${FRPS_CONF}"
 echo "[bridge] using runtime: ${RT}"
 ${RT} rm -f frps >/dev/null 2>&1 || true
 ${RT} run -d --name frps --restart unless-stopped \
-    -p 7000:7000/tcp -p 30814:30814/tcp -p 30814:30814/udp \
+    -p 7000:7000/tcp -p 30814:30814/tcp -p 30814:30814/udp -p 8080:8080/tcp \
     -v "${FRPS_CONF}:/etc/frp/frps.toml:ro" \
     ${FRPS_IMAGE} -c /etc/frp/frps.toml >/dev/null
 
@@ -69,6 +69,7 @@ Firewall (Oracle security list / cloud firewall) must allow INGRESS:
   7000/tcp   frp control channel
   30814/tcp  BeamMP game traffic
   30814/udp  BeamMP game traffic
+  8080/tcp   BeamMP control dashboard (only if you use it)
 
 NOW RUN THIS ON THE MACHINE THAT WILL HOST THE BEAMMP SERVER
 (any machine with internet - no port forwarding, no public IP):
@@ -80,5 +81,12 @@ NOW RUN THIS ON THE MACHINE THAT WILL HOST THE BEAMMP SERVER
       bash
 
 Players join: ${PUBLIC_IP}:30814
+
+OPTIONAL - enable the control dashboard (manage mods/config/console
+from a browser at http://${PUBLIC_IP}:8080). Re-run setup-server.sh
+with these extra env vars:
+
+  BEAMMP_DASHBOARD=1 \\
+  BEAMMP_DASHBOARD_PASSWORD="CHOOSE_A_STRONG_PASSWORD" \\
 ===============================================================
 EOF

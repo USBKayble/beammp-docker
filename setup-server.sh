@@ -16,6 +16,12 @@
 #   BEAMMP_NAME, BEAMMP_DESCRIPTION, BEAMMP_MAX_PLAYERS, BEAMMP_MAX_CARS,
 #   BEAMMP_MAP, BEAMMP_TAGS, BEAMMP_FRP_PORT, BEAMMP_FRP_REMOTE_PORT,
 #   IMAGE (container image, default ghcr.io/usbkayble/beammp-docker:latest)
+#
+# Control dashboard (optional):
+#   BEAMMP_DASHBOARD=1                  enable the web dashboard
+#   BEAMMP_DASHBOARD_PASSWORD           required login password (no default)
+#   BEAMMP_DASHBOARD_PORT               container port (default 8080)
+#   BEAMMP_DASHBOARD_REMOTE_PORT        public port on the bridge (default 8080)
 set -euo pipefail
 
 : "${BEAMMP_AUTH_KEY:?BEAMMP_AUTH_KEY is required - free at https://keymaster.beammp.com}"
@@ -41,6 +47,20 @@ fi
 mkdir -p "${PWD}/Resources"
 if [ "$(id -u)" = "0" ]; then
     chown 1000:1000 "${PWD}/Resources" 2>/dev/null || true
+fi
+
+# The dashboard config editor needs ServerConfig.toml to survive container
+# recreation, so mount it as a volume too (alongside the env-var seeding the
+# binary does on first boot).
+CFG_MOUNT=""
+if [ "${BEAMMP_DASHBOARD:-0}" = "1" ]; then
+    if [ -z "${BEAMMP_DASHBOARD_PASSWORD:-}" ]; then
+        echo "ERROR: BEAMMP_DASHBOARD=1 requires BEAMMP_DASHBOARD_PASSWORD" >&2
+        exit 1
+    fi
+    touch "${PWD}/ServerConfig.toml"
+    chown 1000:1000 "${PWD}/ServerConfig.toml" 2>/dev/null || true
+    CFG_MOUNT="-v ${PWD}/ServerConfig.toml:/beammp/ServerConfig.toml${VOL_FLAG}"
 fi
 
 # Rootless podman maps container uid 1000 to a host subuid, so a plain bind
@@ -79,7 +99,12 @@ ${RT} run -d --name beammp --restart unless-stopped \
     -e BEAMMP_TAGS="${BEAMMP_TAGS:-Freeroam}" \
     -e BEAMMP_FRP_PORT="${BEAMMP_FRP_PORT:-7000}" \
     -e BEAMMP_FRP_REMOTE_PORT="${BEAMMP_FRP_REMOTE_PORT:-30814}" \
+    -e BEAMMP_DASHBOARD="${BEAMMP_DASHBOARD:-0}" \
+    -e BEAMMP_DASHBOARD_PASSWORD="${BEAMMP_DASHBOARD_PASSWORD:-}" \
+    -e BEAMMP_DASHBOARD_PORT="${BEAMMP_DASHBOARD_PORT:-8080}" \
+    -e BEAMMP_DASHBOARD_REMOTE_PORT="${BEAMMP_DASHBOARD_REMOTE_PORT:-8080}" \
     -v "${PWD}/Resources:/beammp/Resources${VOL_FLAG}" \
+    ${CFG_MOUNT} \
     "${IMAGE}"
 
 echo "[server] started. Watching logs (Ctrl+C to detach)..."

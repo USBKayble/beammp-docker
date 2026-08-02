@@ -17,9 +17,15 @@ services:
       BEAMMP_MAP: "/levels/gridmap_v2/info.json"
       BEAMMP_TAGS: "Freeroam,Drift,Racing"
       # BEAMMP_IP: "0.0.0.0"   # only needed if IPv6 is disabled on the host kernel
+      #
+      # Control dashboard (optional): web UI at :8080 for status, console,
+      # mods, config & map selection. Requires BEAMMP_DASHBOARD_PASSWORD.
+      # BEAMMP_DASHBOARD: "1"
+      # BEAMMP_DASHBOARD_PASSWORD: "change-me-strong-password"
     volumes:
       - ./Resources:/beammp/Resources   # your mods/scenarios (auto-synced to players)
-      # Optional: mount a hand-edited config instead of env vars
+      # When using the dashboard's config editor, mount the config so edits
+      # survive container recreation:
       # - ./ServerConfig.toml:/beammp/ServerConfig.toml
 
   # ------------------------------------------------------------------

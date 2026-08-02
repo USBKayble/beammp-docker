@@ -74,6 +74,10 @@ The server reads the native `BEAMMP_*` environment variables (no config file to 
 | `BEAMMP_FRP_PORT` | `7000` | frps control port |
 | `BEAMMP_FRP_TOKEN` | *(unset)* | Shared secret — must match `auth.token` in the bridge's `frps.toml` |
 | `BEAMMP_FRP_REMOTE_PORT` | `30814` | Public port players connect to on the bridge |
+| `BEAMMP_DASHBOARD` | `0` | Set `1` to enable the web control dashboard (see Dashboard) |
+| `BEAMMP_DASHBOARD_PASSWORD` | *(required if dashboard on)* | Login password for the dashboard |
+| `BEAMMP_DASHBOARD_PORT` | `8080` | Dashboard port inside the container |
+| `BEAMMP_DASHBOARD_REMOTE_PORT` | `8080` | Public dashboard port on the bridge |
 
 Alternatively mount a hand-edited `ServerConfig.toml` at `/beammp/ServerConfig.toml` — env vars take precedence
 over the file. Pin a BeamMP version at image build time with the `BEAMMP_VERSION` build arg (default: latest release).
@@ -86,6 +90,39 @@ over the file. Pin a BeamMP version at image build time with the `BEAMMP_VERSION
 - **Maps**: put the map zip in `Resources/Client/`, then set `BEAMMP_MAP` to `/levels/<folder-name>/info.json`
   (the folder name inside the zip's `levels/` directory).
 - `docker attach beammp` opens the server console (`reloadmods`, `protectmod`, `kick`, `exit`, ...).
+
+## Control dashboard (optional)
+
+A login-gated web dashboard runs inside the container for managing the server from a browser — no SSH, no
+`docker attach`. It reads the server log, writes console commands through the same FIFO the entrypoint uses,
+manages mods in `Resources/Client`, and edits `ServerConfig.toml`.
+
+Features: live status (players, map, uptime), a working console, restart, mod list/upload/delete, config editor
+(public/private, player caps, tags, ...) with map selection, all behind a password.
+
+Enable it by setting `BEAMMP_DASHBOARD=1` and a strong `BEAMMP_DASHBOARD_PASSWORD`. With the frp bridge enabled
+a third proxy tunnels it, so you reach it at `http://BRIDGE-IP:8080` — same address players use, no extra ports:
+
+```bash
+docker run -d --name beammp \
+  -e BEAMMP_AUTH_KEY="your-keymaster-key" \
+  -e BEAMMP_FRP_SERVER="BRIDGE_IP" \
+  -e BEAMMP_FRP_TOKEN="CHANGE_ME_shared_secret" \
+  -e BEAMMP_DASHBOARD=1 \
+  -e BEAMMP_DASHBOARD_PASSWORD="CHANGE_ME_strong_password" \
+  -v "$PWD/Resources:/beammp/Resources" \
+  ghcr.io/usbkayble/beammp-docker:latest
+```
+
+Notes:
+
+- The dashboard is **off by default**; without `BEAMMP_DASHBOARD=1` nothing listens on 8080.
+- Once the dashboard edits the config, `ServerConfig.toml` becomes authoritative and the `BEAMMP_*` config env
+  vars are ignored (except `BEAMMP_AUTH_KEY`). Mount the config file if you want dashboard edits to survive
+  container recreation.
+- The config editor needs a restart to apply changes — the dashboard shows a "Restart" button after saving
+  (the container's `--restart unless-stopped` policy brings it back).
+- Without a bridge (direct/host networking), expose the dashboard port yourself, e.g. `-p 8080:8080/tcp`.
 
 ## Networking (no port forwarding needed)
 

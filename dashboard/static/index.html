@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BeamMP — Server Admin</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect width='16' height='16' rx='3' fill='%23f0883e'/></svg>">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- ============ LOGIN SCREEN ============ -->
+<div id="login-screen" class="login-screen hidden">
+  <div class="login-card">
+    <div class="login-logo">BeamMP</div>
+    <h1 class="login-server-name" id="login-server-name">BeamMP Game Server</h1>
+    <p class="login-subtitle">Administrator access required</p>
+    <form id="login-form">
+      <input type="password" id="login-password" placeholder="Server password" autocomplete="current-password">
+      <p class="login-error hidden" id="login-error"></p>
+      <button type="submit" class="btn btn-primary btn-block" id="login-btn">Sign in</button>
+    </form>
+  </div>
+</div>
+
+<!-- ============ APP SHELL ============ -->
+<div id="app" class="app hidden">
+
+  <div class="error-banner hidden" id="error-banner">
+    <span id="error-banner-text"></span>
+    <button type="button" class="error-banner-close" id="error-banner-close" aria-label="Dismiss">&times;</button>
+  </div>
+
+  <header class="topbar">
+    <div class="topbar-left">
+      <div class="brand"><span class="brand-mark" aria-hidden="true"></span>BeamMP</div>
+      <span class="topbar-server" id="header-server-name">&mdash;</span>
+      <span class="online-dot" id="header-online" title="Server status"></span>
+    </div>
+    <div class="topbar-right">
+      <button type="button" class="btn btn-ghost" id="btn-logout">Sign out</button>
+    </div>
+  </header>
+
+  <nav class="tabs" id="tabs">
+    <button type="button" class="tab active" data-tab="status" id="tab-status">Status</button>
+    <button type="button" class="tab" data-tab="console" id="tab-console">Console</button>
+    <button type="button" class="tab" data-tab="mods" id="tab-mods">Mods</button>
+    <button type="button" class="tab" data-tab="config" id="tab-config">Config</button>
+  </nav>
+
+  <main class="content">
+
+    <div class="restart-banner hidden" id="restart-banner">
+      <span class="spinner" aria-hidden="true"></span>
+      <span id="restart-banner-text">Restarting server&hellip; the container will return in ~15&ndash;30s.</span>
+    </div>
+
+    <!-- ============ STATUS ============ -->
+    <section class="panel active" id="panel-status">
+      <div class="status-head">
+        <div class="status-badge offline" id="status-badge">
+          <span class="status-dot" aria-hidden="true"></span>
+          <span class="status-text" id="status-text">OFFLINE</span>
+        </div>
+        <button type="button" class="btn btn-danger" id="btn-restart">Restart Server</button>
+      </div>
+
+      <div class="status-meta" id="status-meta">
+        <div class="stat-card">
+          <span class="stat-label">Server</span>
+          <span class="stat-value" id="status-name">&mdash;</span>
+        </div>
+        <div class="stat-card stat-wide">
+          <span class="stat-label">Description</span>
+          <span class="stat-value" id="status-description">&mdash;</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-label">Map</span>
+          <span class="stat-value mono" id="status-map">&mdash;</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-label">Players</span>
+          <span class="stat-value mono" id="status-players">&mdash;</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-label">Uptime</span>
+          <span class="stat-value mono" id="status-uptime">&mdash;</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-label">Version</span>
+          <span class="stat-value mono" id="status-version">&mdash;</span>
+        </div>
+      </div>
+
+      <h2 class="section-title">Players</h2>
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead>
+            <tr><th>Name</th><th>ID</th><th>Join time</th></tr>
+          </thead>
+          <tbody id="player-table-body"></tbody>
+        </table>
+      </div>
+
+      <h2 class="section-title">Server log <span class="section-sub">last 20 lines</span></h2>
+      <div class="log-panel" id="status-log-lines"></div>
+    </section>
+
+    <!-- ============ CONSOLE ============ -->
+    <section class="panel" id="panel-console">
+      <div class="console-head">
+        <h2 class="section-title" style="margin:0;">Console</h2>
+        <span class="console-status offline" id="console-status">
+          <span class="status-dot" aria-hidden="true"></span>
+          <span id="console-status-text">OFFLINE</span>
+        </span>
+      </div>
+      <div class="console-body">
+        <div class="log-panel log-panel-console" id="console-log"></div>
+        <form class="console-form" id="console-form" autocomplete="off">
+          <input type="text" class="console-input mono" id="console-input"
+                 list="console-suggestions" spellcheck="false"
+                 placeholder="Enter command&hellip; e.g. kick &lt;name&gt;, reloadmods, exit">
+          <datalist id="console-suggestions">
+            <option value="kick &lt;name&gt;"></option>
+            <option value="reloadmods"></option>
+            <option value="exit"></option>
+          </datalist>
+          <button type="submit" class="btn btn-primary" id="console-send">Send</button>
+        </form>
+      </div>
+    </section>
+
+    <!-- ============ MODS ============ -->
+    <section class="panel" id="panel-mods">
+      <div class="mods-header">
+        <h2 class="section-title" style="margin:0;">Mods</h2>
+        <p class="note">Mods are auto-synced to players on join.</p>
+      </div>
+      <div class="upload-row">
+        <input type="file" id="mods-file" accept=".zip">
+        <button type="button" class="btn btn-primary" id="btn-upload">Upload mod</button>
+        <span class="upload-progress" id="upload-progress"></span>
+      </div>
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead>
+            <tr><th>Name</th><th>Size</th><th>Modified</th><th></th></tr>
+          </thead>
+          <tbody id="mods-table-body"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ============ CONFIG ============ -->
+    <section class="panel" id="panel-config">
+      <div class="config-banner hidden" id="config-message">
+        <span>Saved &mdash; restart to apply.</span>
+        <button type="button" class="btn btn-primary btn-sm" id="config-restart-btn">Restart</button>
+      </div>
+      <form id="config-form" class="config-form">
+        <div class="form-grid">
+          <label class="field">
+            <span class="field-label">Name</span>
+            <input type="text" id="cfg-name" class="field-input">
+          </label>
+          <label class="field field-wide">
+            <span class="field-label">Description</span>
+            <input type="text" id="cfg-description" class="field-input">
+          </label>
+          <label class="field">
+            <span class="field-label">Tags</span>
+            <input type="text" id="cfg-tags" class="field-input" placeholder="freeroam, drift, eu">
+          </label>
+          <label class="field">
+            <span class="field-label">Max Players</span>
+            <input type="number" id="cfg-maxPlayers" class="field-input" min="1" max="255">
+          </label>
+          <label class="field">
+            <span class="field-label">Max Cars</span>
+            <input type="number" id="cfg-maxCars" class="field-input" min="1" max="255">
+          </label>
+          <label class="field">
+            <span class="field-label">Map</span>
+            <select id="cfg-map" class="field-input">
+              <option value="">Custom map&hellip;</option>
+            </select>
+          </label>
+          <label class="field">
+            <span class="field-label">Custom map path</span>
+            <input type="text" id="cfg-map-custom" class="field-input mono" placeholder="/levels/custom/level.json">
+          </label>
+        </div>
+        <div class="toggle-list">
+          <label class="toggle">
+            <input type="checkbox" id="cfg-private">
+            <span class="toggle-track" aria-hidden="true"></span>
+            <span class="toggle-label">Private</span>
+          </label>
+          <label class="toggle">
+            <input type="checkbox" id="cfg-allowGuests">
+            <span class="toggle-track" aria-hidden="true"></span>
+            <span class="toggle-label">Allow Guests</span>
+          </label>
+          <label class="toggle">
+            <input type="checkbox" id="cfg-logChat">
+            <span class="toggle-track" aria-hidden="true"></span>
+            <span class="toggle-label">Log Chat</span>
+          </label>
+        </div>
+        <div class="config-actions">
+          <button type="submit" class="btn btn-primary" id="save-config-btn">Save config</button>
+        </div>
+      </form>
+    </section>
+
+  </main>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>

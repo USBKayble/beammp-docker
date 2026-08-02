@@ -3,3 +3,5 @@ config/
 Resources/
 *.toml
 !bridge/frps.toml
+__pycache__/
+*.pyc

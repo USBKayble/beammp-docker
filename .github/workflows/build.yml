@@ -123,7 +123,7 @@ jobs:
           # The frps image entrypoint is bare /usr/bin/frps - pass -c explicitly
           docker run -d --name frps-test \
             --network frpnet \
-            -p 7000:7000/tcp -p 30814:30814/tcp -p 30814:30814/udp \
+            -p 7000:7000/tcp -p 30814:30814/tcp -p 30814:30814/udp -p 8080:8080/tcp \
             -v /tmp/frps.toml:/etc/frp/frps.toml:ro \
             fatedier/frps:v0.70.1 -c /etc/frp/frps.toml
           # Wait until frps is actually listening (image pull + boot can take a while)
@@ -136,7 +136,7 @@ jobs:
           docker logs frps-test
           echo "frps never became ready"; exit 1
 
-      - name: Start server with tunnel enabled
+      - name: Start server with tunnel + dashboard enabled
         run: |
           # Custom network resolves frps-test by name; BEAMMP_FRP_SERVER must be
           # the frps container name (127.0.0.1 would be the container's own loopback)
@@ -145,6 +145,8 @@ jobs:
             -e BEAMMP_AUTH_KEY=000000000000000000000000000000000000 \
             -e BEAMMP_FRP_SERVER=frps-test \
             -e BEAMMP_FRP_TOKEN=ci-shared-secret \
+            -e BEAMMP_DASHBOARD=1 \
+            -e BEAMMP_DASHBOARD_PASSWORD=ci-dashboard-pw \
             ${{ env.IMAGE }}:latest
           for i in $(seq 1 45); do
             if timeout 1 bash -c 'echo > /dev/tcp/localhost/30814' 2>/dev/null; then
@@ -156,7 +158,7 @@ jobs:
           docker logs beammp-tunnel
           echo "Tunneled port 30814 never opened"; exit 1
 
-      - name: Check frpc registered both proxies
+      - name: Check frpc registered all three proxies
         run: |
           docker logs beammp-tunnel 2>&1 | grep -q "login to server success" || \
             { echo "frpc did not reach frps:"; docker logs beammp-tunnel; exit 1; }
@@ -164,7 +166,41 @@ jobs:
             { echo "TCP proxy not registered on frps:"; docker logs frps-test; exit 1; }
           docker logs frps-test 2>&1 | grep -q "new proxy \[beammp-udp\] type \[udp\] success" || \
             { echo "UDP proxy not registered on frps:"; docker logs frps-test; exit 1; }
-          echo "Both TCP and UDP proxies registered"
+          docker logs frps-test 2>&1 | grep -q "new proxy \[beammp-dashboard\] type \[tcp\] success" || \
+            { echo "Dashboard proxy not registered on frps:"; docker logs frps-test; exit 1; }
+          echo "All three proxies registered"
+
+      - name: Dashboard - login and query status over the tunnel
+        run: |
+          for i in $(seq 1 30); do
+            if curl -fsS --max-time 2 http://localhost:8080/ -o /dev/null 2>/dev/null; then
+              echo "DASHBOARD OPEN after ${i}s"; break
+            fi
+            sleep 1
+          done
+          # Unauthenticated API call must be rejected
+          code=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8080/api/status)
+          [ "$code" = "401" ] || { echo "expected 401, got $code"; curl -s http://localhost:8080/api/status; exit 1; }
+          # Wrong password must fail
+          code=$(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'Content-Type: application/json' \
+            -d '{"password":"wrong"}' http://localhost:8080/api/login)
+          [ "$code" = "401" ] || { echo "expected 401 for wrong password, got $code"; exit 1; }
+          # Login and use the session cookie
+          curl -fsS -c /tmp/cj.txt -X POST -H 'Content-Type: application/json' \
+            -d '{"password":"ci-dashboard-pw"}' http://localhost:8080/api/login >/dev/null
+          curl -fsS -b /tmp/cj.txt http://localhost:8080/api/status | grep -q '"online":' || \
+            { echo "status API did not return online field"; exit 1; }
+          echo "Dashboard auth + status OK"
+
+      - name: Dashboard - console command + config persist
+        run: |
+          curl -fsS -b /tmp/cj.txt -X POST -H 'Content-Type: application/json' \
+            -d '{"command":"say CI dashboard test"}' http://localhost:8080/api/console >/dev/null
+          curl -fsS -b /tmp/cj.txt -X POST -H 'Content-Type: application/json' \
+            -d '{"name":"CI-Renamed","maxPlayers":4}' http://localhost:8080/api/config >/dev/null
+          docker exec beammp-tunnel grep -E '^Name|^MaxPlayers' /beammp/ServerConfig.toml | grep -q 'CI-Renamed' || \
+            { echo "config edit not persisted:"; docker exec beammp-tunnel grep -E '^Name|^MaxPlayers' /beammp/ServerConfig.toml; exit 1; }
+          echo "Config edit persisted to ServerConfig.toml"
 
       - name: Verify graceful shutdown with tunnel
         run: |

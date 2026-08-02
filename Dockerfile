@@ -10,7 +10,7 @@ RUN set -eux; \
     ARCH="${TARGETARCH:-amd64}"; \
     if [ "${ARCH}" = "amd64" ]; then ARCH="x86_64"; fi; \
     apt-get update; \
-    apt-get install -y --no-install-recommends curl ca-certificates tzdata liblua5.3-0; \
+    apt-get install -y --no-install-recommends curl ca-certificates tzdata liblua5.3-0 python3; \
     if [ "${BEAMMP_VERSION}" = "latest" ]; then \
         VERSION="$(curl -fsSL https://api.github.com/repos/BeamMP/BeamMP-Server/releases/latest \
             | grep -o '"tag_name": *"[^"]*"' | head -1 | sed 's/.*"\(.*\)".*/\1/')"; \
@@ -35,10 +35,11 @@ RUN useradd --system --uid 1000 --create-home beammp \
     && chown beammp:beammp /beammp
 
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
+COPY dashboard/ /opt/beammp-dashboard/
 
 USER beammp
 WORKDIR /beammp
 
-EXPOSE 30814/tcp 30814/udp
+EXPOSE 30814/tcp 30814/udp 8080/tcp
 
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]

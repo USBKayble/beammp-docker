@@ -9,6 +9,26 @@ if [ -z "${BEAMMP_AUTH_KEY}" ] \
     exit 1
 fi
 
+if [ "${BEAMMP_DASHBOARD}" = "1" ] && [ -z "${BEAMMP_DASHBOARD_PASSWORD}" ]; then
+    echo "ERROR: BEAMMP_DASHBOARD=1 requires BEAMMP_DASHBOARD_PASSWORD" >&2
+    echo "Set BEAMMP_DASHBOARD_PASSWORD to the login password for the control dashboard." >&2
+    exit 1
+fi
+
+# The dashboard's config editor writes ServerConfig.toml. But the binary
+# re-applies BEAMMP_* env vars over that file at every boot (clobbering edits),
+# and only persists env-sourced values into the file after the first run. So
+# once the file has a real AuthKey (binary has booted and written its config),
+# unset the config env vars: the file becomes authoritative and dashboard
+# edits survive restarts. Fresh boots still seed the file from env vars.
+if [ "${BEAMMP_DASHBOARD}" = "1" ] \
+    && grep -q '^[[:space:]]*AuthKey[[:space:]]*=[[:space:]]*"[^"]' /beammp/ServerConfig.toml 2>/dev/null; then
+    unset BEAMMP_NAME BEAMMP_DESCRIPTION BEAMMP_TAGS BEAMMP_PORT BEAMMP_IP \
+        BEAMMP_MAX_PLAYERS BEAMMP_MAX_CARS BEAMMP_MAP BEAMMP_PRIVATE \
+        BEAMMP_DEBUG BEAMMP_LOG_CHAT BEAMMP_ALLOW_GUESTS BEAMMP_RESOURCE_FOLDER 2>/dev/null || true
+    echo "[config] dashboard-managed ServerConfig.toml is authoritative"
+fi
+
 # The release binary has no SIGTERM handler. As container PID 1 it would be
 # immune to 'docker stop' (the kernel drops default-disposition signals for a
 # namespace init). So we stay PID 1, keep the server's console on a FIFO, and
@@ -46,11 +66,15 @@ exec 3<>"${CONSOLE}"
 # this container through a public-facing frps bridge (see README) - no port
 # forwarding or public IP needed on this host. frpc must not inherit the
 # console FIFO fd (3), or shutdown's EOF handshake would never fire.
+# With the control dashboard enabled (BEAMMP_DASHBOARD=1), a third proxy
+# tunnels the dashboard's HTTP port so it is reachable at BRIDGE_IP:8080.
 FRPC_PID=
 if [ -n "${BEAMMP_FRP_SERVER}" ]; then
     FRPC_CONF=/tmp/frpc.toml
     LOCAL_PORT="${BEAMMP_PORT:-30814}"
     REMOTE_PORT="${BEAMMP_FRP_REMOTE_PORT:-${LOCAL_PORT}}"
+    DASH_LOCAL_PORT="${BEAMMP_DASHBOARD_PORT:-8080}"
+    DASH_REMOTE_PORT="${BEAMMP_DASHBOARD_REMOTE_PORT:-${DASH_LOCAL_PORT}}"
     {
         printf 'serverAddr = "%s"\n' "${BEAMMP_FRP_SERVER}"
         printf 'serverPort = %s\n' "${BEAMMP_FRP_PORT:-7000}"
@@ -65,14 +89,38 @@ if [ -n "${BEAMMP_FRP_SERVER}" ]; then
         printf 'localIP = "127.0.0.1"\nlocalPort = %s\nremotePort = %s\n' "${LOCAL_PORT}" "${REMOTE_PORT}"
         printf '[[proxies]]\nname = "beammp-udp"\ntype = "udp"\n'
         printf 'localIP = "127.0.0.1"\nlocalPort = %s\nremotePort = %s\n' "${LOCAL_PORT}" "${REMOTE_PORT}"
+        if [ "${BEAMMP_DASHBOARD}" = "1" ]; then
+            printf '[[proxies]]\nname = "beammp-dashboard"\ntype = "tcp"\n'
+            printf 'localIP = "127.0.0.1"\nlocalPort = %s\nremotePort = %s\n' "${DASH_LOCAL_PORT}" "${DASH_REMOTE_PORT}"
+        fi
     } > "${FRPC_CONF}"
     echo "[frpc] tunneling ${LOCAL_PORT}/tcp+udp via ${BEAMMP_FRP_SERVER}:${BEAMMP_FRP_PORT:-7000} -> port ${REMOTE_PORT}"
+    if [ "${BEAMMP_DASHBOARD}" = "1" ]; then
+        echo "[frpc] dashboard tunnel ${DASH_LOCAL_PORT} -> ${BEAMMP_FRP_SERVER}:${DASH_REMOTE_PORT}"
+    fi
     /usr/local/bin/frpc -c "${FRPC_CONF}" 3>&- &
     FRPC_PID=$!
     sleep 2
     if ! kill -0 "${FRPC_PID}" 2>/dev/null; then
         echo "ERROR: frpc exited immediately - check BEAMMP_FRP_SERVER/TOKEN/REMOTE_PORT" >&2
         wait "${FRPC_PID}" 2>/dev/null || true
+        exit 1
+    fi
+fi
+
+# Optional control dashboard: a stdlib-only Python HTTP server (login-gated)
+# that reads Server.log, writes console commands to the FIFO, manages mods in
+# Resources/Client, and edits ServerConfig.toml. Must not inherit the console
+# FIFO fd (3), same reason as frpc.
+DASH_PID=
+if [ "${BEAMMP_DASHBOARD}" = "1" ]; then
+    echo "[dashboard] starting control dashboard on port ${BEAMMP_DASHBOARD_PORT:-8080}"
+    python3 /opt/beammp-dashboard/server.py --port "${BEAMMP_DASHBOARD_PORT:-8080}" 3>&- &
+    DASH_PID=$!
+    sleep 1
+    if ! kill -0 "${DASH_PID}" 2>/dev/null; then
+        echo "ERROR: dashboard exited immediately" >&2
+        wait "${DASH_PID}" 2>/dev/null || true
         exit 1
     fi
 fi
@@ -117,5 +165,9 @@ done
 if [ -n "${FRPC_PID}" ]; then
     kill "${FRPC_PID}" 2>/dev/null || true
     wait "${FRPC_PID}" 2>/dev/null || true
+fi
+if [ -n "${DASH_PID}" ]; then
+    kill "${DASH_PID}" 2>/dev/null || true
+    wait "${DASH_PID}" 2>/dev/null || true
 fi
 exit "${RC}"
