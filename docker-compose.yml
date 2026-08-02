@@ -1,6 +1,6 @@
 services:
   beammp:
-    image: ghcr.io/USBKayble/beammp-docker:latest
+    image: ghcr.io/usbkayble/beammp-docker:latest
     container_name: beammp
     restart: unless-stopped
     ports:

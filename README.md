@@ -11,7 +11,7 @@ docker run -d --name beammp \
   -p 30814:30814/tcp -p 30814:30814/udp \
   -e BEAMMP_AUTH_KEY="your-keymaster-key" \
   -v "$PWD/Resources:/beammp/Resources" \
-  ghcr.io/USBKayble/beammp-docker:latest
+  ghcr.io/usbkayble/beammp-docker:latest
 ```
 
 Or with docker-compose (see `docker-compose.yml` for the full annotated version, including networking options).
@@ -110,7 +110,7 @@ docker run -d --name beammp \
   -e BEAMMP_FRP_SERVER="BRIDGE_IP" \
   -e BEAMMP_FRP_TOKEN="CHANGE_ME_shared_secret" \
   -v "$PWD/Resources:/beammp/Resources" \
-  ghcr.io/USBKayble/beammp-docker:latest
+  ghcr.io/usbkayble/beammp-docker:latest
 ```
 
 Set up the bridge once, on any free machine with a public IP (e.g. an Oracle Cloud free AMD VM — 1/8 core / 1 GB is

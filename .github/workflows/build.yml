@@ -7,7 +7,9 @@ on:
   workflow_dispatch:
 
 env:
-  IMAGE: ghcr.io/${{ github.repository }}
+  # GHCR requires lowercase repository names; github.repository preserves the
+  # owner's casing (USBKayble), so hardcode the canonical lowercase form.
+  IMAGE: ghcr.io/usbkayble/beammp-docker
 
 jobs:
   build:
@@ -66,14 +68,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Pull image
-        run: docker pull ghcr.io/${{ github.repository }}:latest
+        run: docker pull ${{ env.IMAGE }}:latest
 
       - name: Start server (dummy auth, 10s)
         run: |
           docker run -d --name beammp-test \
             -p 30814:30814/tcp -p 30814:30814/udp \
             -e BEAMMP_AUTH_KEY=000000000000000000000000000000000000 \
-            ghcr.io/${{ github.repository }}:latest
+            ${{ env.IMAGE }}:latest
           # Give it a moment to boot and bind the port
           for i in $(seq 1 30); do
             if timeout 1 bash -c 'echo > /dev/tcp/localhost/30814' 2>/dev/null; then
@@ -108,7 +110,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Pull image
-        run: docker pull ghcr.io/${{ github.repository }}:latest
+        run: docker pull ${{ env.IMAGE }}:latest
 
       - name: Start frps bridge
         run: |
@@ -143,7 +145,7 @@ jobs:
             -e BEAMMP_AUTH_KEY=000000000000000000000000000000000000 \
             -e BEAMMP_FRP_SERVER=frps-test \
             -e BEAMMP_FRP_TOKEN=ci-shared-secret \
-            ghcr.io/${{ github.repository }}:latest
+            ${{ env.IMAGE }}:latest
           for i in $(seq 1 45); do
             if timeout 1 bash -c 'echo > /dev/tcp/localhost/30814' 2>/dev/null; then
               echo "TUNNEL OPEN after ${i}s"; exit 0

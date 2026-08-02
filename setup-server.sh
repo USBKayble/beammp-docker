@@ -15,14 +15,14 @@
 # Optional env vars (defaults shown):
 #   BEAMMP_NAME, BEAMMP_DESCRIPTION, BEAMMP_MAX_PLAYERS, BEAMMP_MAX_CARS,
 #   BEAMMP_MAP, BEAMMP_TAGS, BEAMMP_FRP_PORT, BEAMMP_FRP_REMOTE_PORT,
-#   IMAGE (container image, default ghcr.io/USBKayble/beammp-docker:latest)
+#   IMAGE (container image, default ghcr.io/usbkayble/beammp-docker:latest)
 set -euo pipefail
 
 : "${BEAMMP_AUTH_KEY:?BEAMMP_AUTH_KEY is required - free at https://keymaster.beammp.com}"
 : "${BEAMMP_FRP_SERVER:?BEAMMP_FRP_SERVER is required - run setup-bridge.sh first}"
 : "${BEAMMP_FRP_TOKEN:?BEAMMP_FRP_TOKEN is required - run setup-bridge.sh first}"
 
-IMAGE="${IMAGE:-ghcr.io/USBKayble/beammp-docker:latest}"
+IMAGE="${IMAGE:-ghcr.io/usbkayble/beammp-docker:latest}"
 
 # --- runtime detection -------------------------------------------------------
 if command -v docker >/dev/null 2>&1; then
