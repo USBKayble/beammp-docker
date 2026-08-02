@@ -19,12 +19,19 @@ rm -f "${CONSOLE}"
 mkfifo "${CONSOLE}"
 
 GOT_SIGNAL=0
+SERVER_SPAWNED=0
 shutdown() {
     GOT_SIGNAL=1
-    echo "exit" > "${CONSOLE}" 2>/dev/null || true
-    # Drop the hold-open fd so the server's stdin hits EOF: its console-input
-    # thread only unblocks on EOF, and shutdown joins that thread.
-    exec 3>&- 2>/dev/null || true
+    # If SIGTERM lands before the server pipeline spawned (e.g. during the
+    # frpc boot wait), delivering 'exit' now is lost: with fd 3 closed and no
+    # writer, cat blocks forever on open() and the booting server never reads
+    # it. Leave fd 3 alone and let the post-spawn handshake deliver shutdown.
+    if [ "${SERVER_SPAWNED}" -eq 1 ]; then
+        echo "exit" > "${CONSOLE}" 2>/dev/null || true
+        # Drop the hold-open fd so the server's stdin hits EOF: its
+        # console-input thread only unblocks on EOF, and shutdown joins it.
+        exec 3>&- 2>/dev/null || true
+    fi
     trap shutdown_late TERM INT
 }
 shutdown_late() { :; }
@@ -72,6 +79,22 @@ fi
 
 { exec 3>&-; exec cat "${CONSOLE}"; } | { exec 3>&-; exec /usr/local/bin/BeamMP-Server; } &
 SERVER_PID=$!
+SERVER_SPAWNED=1
+
+# If a stop landed before the pipeline spawned, its 'exit' was deferred (see
+# shutdown()). Wait for the game port to actually listen, then deliver the
+# shutdown now that cat is forwarding stdin to the server.
+if [ "${GOT_SIGNAL}" -eq 1 ]; then
+    GAME_PORT="${BEAMMP_PORT:-30814}"
+    for _ in $(seq 1 15); do
+        if (exec 3<>"/dev/tcp/127.0.0.1/${GAME_PORT}") 2>/dev/null; then
+            break
+        fi
+        sleep 1
+    done
+    echo "exit" > "${CONSOLE}" 2>/dev/null || true
+    exec 3>&- 2>/dev/null || true
+fi
 
 # 'wait' returns 128+N when a trapped signal interrupts it (trap runs after);
 # keep waiting until the server really exits and exit with its actual status.
