@@ -244,13 +244,23 @@ def parse_log_time(mo, dy, yr, hh, mm, ss):
         return None
 
 
-_PLAYER_JOIN = re.compile(r'"(.+?)"\s+\((\w+)\)\s+joined', re.IGNORECASE)
-_PLAYER_LEAVE = re.compile(r'"(.+?)"\s+\((\w+)\)\s+(?:left|disconnected)', re.IGNORECASE)
+# BeamMP real log formats (v3.9.x, from the BeamMP-Server source):
+#   join complete : "[INFO] <name> : Connected"
+#   id assignment : "[INFO] Assigned ID <n> to <name>"
+#   leave         : "[INFO] <name> Connection Terminated"
+# In Debug mode a "(<id>) \"<name>\"" context prefix precedes the level, but
+# the trailing "<name> : Connected" / "<name> Connection Terminated" still
+# holds regardless, so these regexes work in both log modes.
+_JOIN_COMPLETE = re.compile(r'\[INFO\]\s+(.+?)\s*:\s*Connected$')
+_LEAVE = re.compile(r'\[INFO\]\s+(.+?)\s+Connection[\s_]Terminated$')
+_ASSIGN_ID = re.compile(r'\[INFO\]\s+Assigned ID\s+(\d+)\s+to\s+(.+?)\s*$')
 
 
 def players_from_log():
     """Reconstruct the current player roster by replaying join/leave events
-    since the last clean server start."""
+    since the last clean server start. BeamMP logs a join-complete line
+    (\"<name> : Connected\") and a leave line (\"<name> Connection
+    Terminated\"); player IDs come from the \"Assigned ID\" handshake line."""
     try:
         raw = LOG_FILE.read_bytes()
     except OSError:
@@ -261,12 +271,23 @@ def players_from_log():
         if _STARTED in line:
             start = i + 1
     roster = {}
+    name_to_id = {}
     for line in lines[start:]:
-        for m in _PLAYER_JOIN.finditer(line):
-            name, pid = m.group(1), m.group(2)
-            roster[pid] = {"name": name, "id": pid, "joinTime": time.time()}
-        for m in _PLAYER_LEAVE.finditer(line):
-            roster.pop(m.group(2), None)
+        am = _ASSIGN_ID.search(line)
+        if am:
+            name = am.group(2).strip()
+            name_to_id[name] = am.group(1)
+        jm = _JOIN_COMPLETE.search(line)
+        if jm:
+            name = jm.group(1).strip()
+            roster[name] = {
+                "name": name,
+                "id": name_to_id.get(name, ""),
+                "joinTime": time.time(),
+            }
+        lm = _LEAVE.search(line)
+        if lm:
+            roster.pop(lm.group(1).strip(), None)
     return sorted(roster.values(), key=lambda p: p["joinTime"])
 
 
